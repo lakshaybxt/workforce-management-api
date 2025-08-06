@@ -4,15 +4,18 @@ package com.railse.hiring.workforcemgmt.service.impl;
 import com.railse.hiring.workforcemgmt.common.exception.ResourceNotFoundException;
 import com.railse.hiring.workforcemgmt.dto.*;
 import com.railse.hiring.workforcemgmt.mapper.ITaskManagementMapper;
+import com.railse.hiring.workforcemgmt.model.ActivityLog;
+import com.railse.hiring.workforcemgmt.model.Comment;
 import com.railse.hiring.workforcemgmt.model.TaskManagement;
+import com.railse.hiring.workforcemgmt.model.enums.Priority;
 import com.railse.hiring.workforcemgmt.model.enums.Task;
 import com.railse.hiring.workforcemgmt.model.enums.TaskStatus;
 import com.railse.hiring.workforcemgmt.repository.TaskRepository;
 import com.railse.hiring.workforcemgmt.service.TaskManagementService;
 import org.springframework.stereotype.Service;
 
-
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -35,7 +38,44 @@ public class TaskManagementServiceImpl implements TaskManagementService {
     public TaskManagementDto findTaskById(Long id) {
         TaskManagement task = taskRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Task not found with id: " + id));
+
+        task.getActivityHistory().sort(Comparator.comparing(ActivityLog::getTimestamp));
+        task.getComments().sort(Comparator.comparing(Comment::getTimeStamp));
         return taskMapper.modelToDto(task);
+    }
+
+    @Override
+    public String updateTaskPriority(Long id, Priority priority) {
+        TaskManagement task = taskRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Task not found with id: " + id));
+
+        task.setPriority(priority);
+        task.getActivityHistory().add(new ActivityLog(
+                "Priority changed to " + priority,
+                System.currentTimeMillis()
+        ));
+        return "Priority updated successfully for task " + id;
+    }
+
+    @Override
+    public List<TaskManagementDto> getTasksByPriority(Priority priority) {
+        List<TaskManagement> tasks = taskRepository.findAll();
+        return tasks.stream()
+                .filter(task -> task.getPriority() == priority)
+                .map(taskMapper::modelToDto)
+                .toList();
+    }
+
+    @Override
+    public String addComment(Long id, Long userId, String text) {
+        TaskManagement task = taskRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Task not found with id: " + id));
+        task.getComments().add(new Comment(userId, text, System.currentTimeMillis()));
+        task.getActivityHistory().add(new ActivityLog(
+                "Comment added by User " + userId,
+                System.currentTimeMillis()
+        ));
+        return "Comment added to task " + id;
     }
 
 
@@ -92,10 +132,18 @@ public class TaskManagementServiceImpl implements TaskManagementService {
 
             // BUG #1 is here. It should assign one and cancel the rest.
             // Instead, it reassigns ALL of them.
+            // Solve the Bug by:
+            // Assign the first task found
+            // Cancel all other uncompleted tasks.
             if (!tasksOfType.isEmpty()) {
-                for (TaskManagement taskToUpdate : tasksOfType) {
-                    taskToUpdate.setAssigneeId(request.getAssigneeId());
-                    taskRepository.save(taskToUpdate);
+                TaskManagement taskToAssign = tasksOfType.get(0);
+                taskToAssign.setAssigneeId(request.getAssigneeId());
+
+                taskRepository.save(taskToAssign);
+                for (int i = 1; i<tasksOfType.size(); i++) {
+                    TaskManagement taskToCancel = tasksOfType.get(i);
+                    taskToCancel.setStatus(TaskStatus.CANCELLED);
+                    taskRepository.save(taskToCancel);
                 }
             } else {
                 // Create a new task if none exist
@@ -119,11 +167,22 @@ public class TaskManagementServiceImpl implements TaskManagementService {
 
         // BUG #2 is here. It should filter out CANCELLED tasks but doesn't.
         List<TaskManagement> filteredTasks = tasks.stream()
+//                .filter(task -> {
+//                    // This logic is incomplete for the assignment.
+//                    // It should check against startDate and endDate.
+//                    // For now, it just returns all tasks for the assignees.
+//                    return true;
+//                })
+                .filter(task -> task.getStatus() != TaskStatus.CANCELLED)
                 .filter(task -> {
-                    // This logic is incomplete for the assignment.
-                    // It should check against startDate and endDate.
-                    // For now, it just returns all tasks for the assignees.
-                    return true;
+                    long deadlineMillis = task.getTaskDeadlineTime();
+                    boolean isActive = task.getStatus() != TaskStatus.COMPLETED;
+                    boolean withinRange = deadlineMillis >= request.getStartDate() &&
+                            deadlineMillis <= request.getEndDate();
+                    boolean beforeRangeStillOpen = deadlineMillis < request.getStartDate() &&
+                            isActive;
+
+                    return withinRange || beforeRangeStillOpen;
                 })
                 .collect(Collectors.toList());
 
