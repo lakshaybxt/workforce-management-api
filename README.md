@@ -1,86 +1,127 @@
-# Workforce Management - Starter Project
+# Workforce Management API
 
+This is a **Spring Boot** (in-memory) REST API that helps manage workforce tasks.  
+It supports task assignment, priority management, activity history, and user comments — all without using a database.
 
-This is a Spring Boot application for the Backend Engineer take-home assignment.
+---
 
+## ✨ What’s Inside
 
-## How to Run
+### 🐛 Bug Fixes
+- **Duplicate tasks on reassignment** → Fixed so that when you reassign, the old task gets **cancelled** instead of duplicated.
+- **Cancelled tasks showing up in lists** → They’re now filtered out when fetching tasks.
+- **Smarter “Today’s Work” view** → You now see:
+  - All active tasks created **within** your date range.
+  - All active tasks created **before** your date range but still open.
 
+---
 
-1.  Ensure you have Java 17 and Gradle installed.
-2.  Open the project in your favorite IDE (IntelliJ, VSCode, etc.).
-3.  Run the main class `com.railse.hiring.workforcemgmt.Application`.
-4.  The application will start on `http://localhost:8080`.
+### 🚀 New Features
+1. **Task Priority**
+   - Priorities: `HIGH`, `MEDIUM`, `LOW`.
+   - Change priority any time.
+   - Fetch tasks filtered by priority.
 
+2. **Activity History**
+   - Logs key actions: creation, reassignment, priority changes, cancellations.
 
-## API Endpoints
+3. **User Comments**
+   - Add free-text comments to any task.
+   - Task details include both **activity history** and **comments**, sorted by time.
 
+---
 
-Here are some example `cURL` commands to interact with the API.
+## 🛠 Tech Stack
+- Java 17
+- Spring Boot
+- Gradle
+- Lombok
+- In-memory storage (no DB required)
 
+---
 
-### Get a single task
-```bash
-curl --location 'http://localhost:8080/task-mgmt/1'
+## 📌 API Endpoints
+
+### Task Assignment
+```http
+POST /tasks/assign-by-ref
+```
+Assign tasks for a reference type and cancel the old ones.
+
+---
+
+### Priority Management
+```http
+PUT /tasks/{id}/priority?priority=HIGH
+GET /tasks/priority/{priority}
 ```
 
+---
 
-### Create a new task
-```bash
-curl --location 'http://localhost:8080/task-mgmt/create' \
---header 'Content-Type: application/json' \
---data '{
-   "requests": [
-       {
-           "reference_id": 105,
-           "reference_type": "ORDER",
-           "task": "CREATE_INVOICE",
-           "assignee_id": 1,
-           "priority": "HIGH",
-           "task_deadline_time": 1728192000000
-       }
-   ]
-}'
+### Comments
+```http
+POST /tasks/{id}/comments?userId=1&text=Please+complete+soon
 ```
 
+---
 
-### Update a task's status
+### Fetch Tasks by Date Range
+```http
+GET /tasks/date-range
+```
+- Shows all active tasks in the range.
+- Also includes still-open tasks that started before the range.
+- Cancelled tasks are excluded.
+
+---
+
+### Task Details
+```http
+GET /tasks/{id}
+```
+- Full activity history + all comments in chronological order.
+
+---
+
+## ▶ How to Run
+
+### 1. Clone the repo
 ```bash
-curl --location 'http://localhost:8080/task-mgmt/update' \
---header 'Content-Type: application/json' \
---data '{
-   "requests": [
-       {
-           "task_id": 1,
-           "task_status": "STARTED",
-           "description": "Work has been started on this invoice."
-       }
-   ]
-}'
+git clone https://github.com/lakshaybxt/workforce-management-api.git
+cd workforce-management-api
 ```
 
-
-### Assign tasks by reference (Bug #1 is here)
-This assigns all tasks for `reference_id: 201` to `assignee_id: 5`.
+### 2. Run the app
 ```bash
-curl --location 'http://localhost:8080/task-mgmt/assign-by-ref' \
---header 'Content-Type: application/json' \
---data '{
-   "reference_id": 201,
-   "reference_type": "ENTITY",
-   "assignee_id": 5
-}'
+./gradlew bootRun
 ```
 
+---
 
-### Fetch tasks by date (Bug #2 is here)
-This fetches tasks for assignees 1 and 2. It incorrectly includes cancelled tasks.
-```bash
-curl --location 'http://localhost:8080/task-mgmt/fetch-by-date/v2' \
---header 'Content-Type: application/json' \
---data '{
-   "start_date": 1672531200000,
-   "end_date": 1735689599000,
-   "assignee_ids": [1, 2]
-}'
+## 📦 Example Task JSON
+```json
+{
+  "id": 1,
+  "referenceId": 101,
+  "referenceType": "CUSTOMER",
+  "task": "ARRANGE_PICKUP",
+  "description": "Pickup arrangement for order #101",
+  "status": "ASSIGNED",
+  "assigneeId": 5,
+  "priority": "HIGH",
+  "taskDeadlineTime": 1728200000000,
+  "activityHistory": [
+    { "message": "Task created by User A", "timestamp": 1728200000000 },
+    { "message": "Priority changed to HIGH", "timestamp": 1728205000000 }
+  ],
+  "comments": [
+    { "userId": 101, "text": "This needs to be done ASAP", "timestamp": 1728207000000 }
+  ]
+}
 ```
+
+---
+
+## 👤 Author
+**Lakshay Bisht**  
+[GitHub](https://github.com/lakshaybxt)
